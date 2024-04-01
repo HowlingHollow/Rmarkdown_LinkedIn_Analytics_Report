@@ -16,7 +16,7 @@
   
   - The report script can be run over arbitrary timeframe lengths and intervals, given that the relevant data has been input to the spreadsheet.
   
-  - See the `example_report.html` file to learn what is included in the generated report and how it looks. This example was made using data from [my own LinkedIn](www.linkedin.com/in/howlinghollow) posts.
+  - See the `example_report.html` file to learn what is included in the generated report and how it looks. This example was made using data from [my own LinkedIn](https://www.linkedin.com/in/howlinghollow) posts.
 
 #### What you Need to Use it
 
