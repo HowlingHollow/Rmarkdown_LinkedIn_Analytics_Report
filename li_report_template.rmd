@@ -1,0 +1,292 @@
+---
+output:
+  html_document: default
+  author: Jared White (script)
+  date: 2024-03-20
+  license: cc-by-4.0
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, tidy=TRUE}
+# Load libraries, import, clean, and format the data
+library(tidyverse)
+library(janitor)
+library(readr)
+library(lubridate)
+library(formatR)
+
+df_raw <- clean_names(read_csv("li_data.csv"))
+# convert dates to iso & engagement to numeric, remove "#" from strings.
+df <- df_raw %>% mutate(date = mdy(date),
+                              engagement = as.numeric(sub("%", "", engagement))) %>% 
+  mutate(across(starts_with("hashtag"), ~str_remove(., "#")))
+remove(df_raw)
+# make long for hashtag analysis
+df_long <- df %>% 
+  pivot_longer(cols = starts_with("hashtag"),
+              names_to = "hashtag_number",
+              values_to = "hashtag") %>% drop_na() %>% 
+  select(-hashtag_number)
+
+# make useful variables
+count_posts_total <- max(df$id)
+rpt_start_date <- format(min(df$date), "%b %d, '%y")
+rpt_end_date <- format(max(df$date), "%b %d, '%y")
+cap_text <- paste0(count_posts_total, " posts: ", 
+                   rpt_start_date," - ",rpt_end_date)
+
+```
+
+## LinkedIn Analytics Report
+
+##### `r paste0(cap_text)`
+
+##### The engagement formula is:
+
+$\large Engagement =\huge \frac{{n_{reactions} + (n_{comments} \times 2)}}{n_{views}}$
+
+(Engagement is rated as a percentage of total views, and comments are weighted twice as heavily as reactions.)
+
+#### Subject - Engagement
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+sub_eng <- df %>% group_by(subject) %>% summarize(avg_eng = mean(engagement))
+
+#Plot
+ggplot(data = sub_eng, mapping = aes(x=subject,y=avg_eng,fill=subject)) + geom_col() + 
+  labs (y = "Average Engagement", x = "Subject of Post", title = "Average Engament per Subject", caption = cap_text) + 
+  geom_text(aes(x = subject, y = 0.8*avg_eng, label = paste0(round(avg_eng, 2), "%"), fontface = 'bold'))
+```
+
+#### Engagement Time-Series
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+ggplot(data = df, aes(x = date, y = engagement)) + 
+  geom_smooth(color = 'black')+ 
+    geom_text(aes(label = id, color = subject, fontface = 'bold')) +
+  labs(title = "Engagement per Post",
+       subtitle = "(shown over time)",
+       x = "Date of Post",
+       y = "Engagement Metric to Date",
+       caption = cap_text)
+```
+
+#### Engagement 5 Number Summary
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+eng_5num <- fivenum(df$engagement, na.rm = TRUE) 
+names(eng_5num) <- c("Minimum", "Q1", "Median", "Q3", "Maximum")
+print(eng_5num)
+```
+
+(Engagement metric for all posts reported)
+
+#### Views Time-Series
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+ggplot(data = df, aes(x = date, y = views)) + 
+  geom_smooth(color = 'black')+ 
+    geom_text(aes(label = id, color = subject, fontface = 'bold')) +
+  labs(title = "Views per Post",
+       subtitle = "(shown over time)",
+       x = "Date of Post",
+       y = "Number of Views to Date",
+       caption = cap_text)
+```
+
+#### Views 5 Number Summary
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+views_5num <- fivenum(df$views, na.rm = TRUE) 
+names(views_5num) <- c("Minimum", "Q1", "Median", "Q3", "Maximum")
+print(views_5num)
+```
+
+(Views for all posts reported)
+
+#### Hashtags - Average Views
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+# make a summary of hashtag metrics
+hash_summ <- df_long %>%
+  group_by(hashtag) %>% 
+  summarise(n_posts = n_distinct(id),
+            sum_views = sum(views),
+            avg_views = (sum(views)/n_distinct(id)),
+            .groups = "drop") %>% arrange(., -avg_views)
+# get top tags performing used in more than one post
+top_hash <- head(filter(hash_summ, n_posts > 1), n = 10L)
+ggplot(data = top_hash) + 
+  geom_col(aes(x = hashtag, y = avg_views, fill = hashtag), show.legend = FALSE) +
+  geom_text(aes(x = hashtag, y = 0.85*avg_views, label = n_posts, fontface = "bold")) +
+  guides(x = guide_axis(angle = 45)) +
+  labs(title = "Top 10 Performing Hashtags, with Number of Times Used",
+       subtitle = "(of tags used more than once)",
+       x = "Hashtag",
+       y = "Average Views to date",
+       caption = cap_text)
+```
+
+#### Post Day - Views
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+day_view <- df %>% group_by(wday) %>% summarize(avg_views = mean(views))
+#add day numbers to order by (FIX THIS)
+for (i in 1:length(day_view$wday)){
+  if (day_view$wday[i] == 'monday'){
+    day_view$day_num[i] <- 1
+  } else if(day_view$wday[i] == 'tuesday'){
+    day_view$day_num[i] <- 2
+  } else if(day_view$wday[i] == 'wednesday'){
+    day_view$day_num[i] <- 3
+  } else if(day_view$wday[i] == 'thursday'){
+    day_view$day_num[i] <- 4
+  } else if(day_view$wday[i] == 'friday'){
+    day_view$day_num[i] <- 5
+  } else if(day_view$wday[i] == 'saturday'){
+    day_view$day_num[i] <- 6
+  } else if(day_view$wday[i] == 'sunday'){
+    day_view$day_num[i] <- 7
+  }}
+#Plot
+ggplot(data = day_view, 
+       mapping = aes(x=factor(wday, levels = wday[order(day_num)]),y=avg_views)) + 
+  scale_fill_distiller(palette = "Blues", name = NULL, guide = NULL) +
+  geom_col(aes(fill = day_num),color = 'darkblue') +
+  geom_text(aes(x = wday, y = 0.8*avg_views, label = wday, fontface = "bold")) +
+  theme(axis.text.x = element_blank())+
+  labs(title = "Average Views per Weekday of Post",
+       x = "Day of Week",
+       y = "Average Number of Views",
+       caption = cap_text)
+```
+
+
+#### Image - Engagement
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+img_eng <- df %>% group_by(image) %>% summarize(avg_eng = mean(engagement))
+#Plot
+ggplot(data = img_eng, mapping = aes(x=image,y=avg_eng,fill = factor(image))) + 
+  geom_col(color = "darkblue") +
+  scale_fill_brewer(palette = "Blues", name = NULL, guide = NULL) +
+  geom_text(aes(x = image, y = 0.85*avg_eng, 
+                label = ifelse(image == TRUE, paste0(round(avg_eng, 2), "%", "\n", "Image"),
+                               paste0(round(avg_eng, 2), "%", "\n", "No Image")),
+                fontface = 'bold')) +
+  theme(axis.text.x = element_blank()) +
+  labs(title = "Average Post Engagement With & Without Images",
+       x = "Image Included", y = "Average Engagement", caption = cap_text)
+```
+
+#### Link - Engagement
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+link_eng <- df %>% group_by(link) %>% summarize(avg_eng = mean(engagement))
+#Plot
+ggplot(data = link_eng, mapping = aes(x=link,y=avg_eng,fill = factor(link))) + 
+  geom_col(color = "darkgreen") +
+  scale_fill_brewer(palette = "Greens", name = NULL, guide = NULL) +
+  geom_text(aes(x = link, y = 0.85*avg_eng, 
+                label = ifelse(link == TRUE, paste0(round(avg_eng, 2), "%", "\n", "Link"),
+                               paste0(round(avg_eng, 2), "%", "\n", "No Link")),
+                fontface = 'bold')) +
+  theme(axis.text.x = element_blank()) +
+  labs(title = "Average Post Engagement With & Without Links",
+       x = "Link Included", y = "Average Engagement", caption = cap_text)
+```
+
+#### Emojis - Engagement
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+emoji_eng <- df %>% group_by(multiple_emojis) %>% summarize(avg_eng = mean(engagement))
+#Plot
+ggplot(data = emoji_eng, mapping = aes(x=multiple_emojis,y=avg_eng,fill = factor(multiple_emojis))) + 
+  geom_col(color = "darkred") +
+  scale_fill_brewer(palette = "Reds", name = NULL, guide = NULL) +
+  geom_text(aes(x = multiple_emojis, y = 0.8*avg_eng, 
+                label = ifelse(multiple_emojis == TRUE, paste0(round(avg_eng, 2), "%", "\n", "2+ Emojis"),
+                               paste0(round(avg_eng, 2), "%", "\n", "1 or No Emojis")),
+                fontface = 'bold')) +
+  theme(axis.text.x = element_blank()) +
+  labs(title = "Average Post Engagement With & Without Multiple Emojis",
+       x = "Multiple Emojis Included", y = "Average Engagement", caption = cap_text)
+```
+
+#### Cross Posted - Engagement
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Create a summary table
+cross_eng <- df %>% group_by(cross_posted) %>% summarize(avg_eng = mean(engagement))
+#more colors
+gold_boo <- c("#fff54e","#fffab2") 
+names(gold_boo) <- c("TRUE","FALSE")
+#Plot
+ggplot(data = cross_eng, mapping = aes(x=cross_posted,y=avg_eng,fill = cross_posted)) + 
+  geom_col(color = "gold")+
+  scale_fill_manual(values = gold_boo, name = NULL, guide = NULL) +
+  geom_text(aes(x = cross_posted, y = 0.8*avg_eng, 
+                label = ifelse(cross_posted == TRUE, paste0(round(avg_eng, 2), "%", "\n", "Cross Posted"),
+                               paste0(round(avg_eng, 2), "%", "\n", "Not Cross Posted")),
+                fontface = 'bold')) +
+  theme(axis.text.x = element_blank()) +
+  labs(title = "Whether the post was also Cross-Posted to a Relevant LinkedIn Group",
+       x = "Cross Posted", y = "Average Engagement", caption = cap_text)
+```
+
+#### Several Metrics Scatter Plot
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+#Plot
+ggplot(data = df, mapping = aes(x=wordcount,y=engagement,color=subject)) + 
+  geom_point(aes(size = views)) + 
+  geom_text(aes(label = id), vjust =ifelse(
+    df$engagement > .9*max(df$engagement), 1.5, -.75), hjust = 0.5, color = 'black') +
+   labs(title = "Wordcount to Engagement for Each Post",
+       x = "Wordcount",
+       y = "Post Engagement",
+       caption = cap_text)
+```
+
+#### Wordcount 5 Number Summary
+
+```{r echo=FALSE, warning=FALSE, tidy=TRUE}
+wc_5num <- fivenum(df$wordcount, na.rm = TRUE) 
+names(wc_5num) <- c("Minimum", "Q1", "Median", "Q3", "Maximum")
+print(wc_5num)
+```
+
+#### Script Citations
+
+R:
+
+R Core Team (2021). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
+
+tidyverse:
+
+Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A, Henry L,
+Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM, Müller K, Ooms J, Robinson D, Seidel DP,
+Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to the tidyverse.”
+  _Journal of Open Source Software_, *4*(43), 1686. doi: 10.21105/joss.01686 (URL:
+  https://doi.org/10.21105/joss.01686).
+
+janitor:
+
+Sam Firke (2023). janitor: Simple Tools for Examining and Cleaning Dirty Data. R package
+  version 2.2.0. https://CRAN.R-project.org/package=janitor
+
+readr:
+
+Hadley Wickham, Jim Hester and Jennifer Bryan (2024). readr: Read Rectangular Text Data. R
+  package version 2.1.5. https://CRAN.R-project.org/package=readr
+  
+lubridate:
+
+  Garrett Grolemund, Hadley Wickham (2011). Dates and Times Made Easy with lubridate. Journal
+  of Statistical Software, 40(3), 1-25. URL https://www.jstatsoft.org/v40/i03/.
+
+
