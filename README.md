@@ -8,7 +8,7 @@
 
 #### What it Does
 
-- The `Template_LI_Post_Metrics.xlsx` file can be used to track various the metrics of LinkedIn posts, such as views (impressions), engagements, comments, hashtags, etc.
+- The `Template_LI_Post_Metrics.xlsx` file can be used to track the various metrics of LinkedIn posts, such as views (impressions), engagements, comments, hashtags, etc.
 
 - The `LI_Report_Template.rmd` file, when run in RStudio, will generate a visual analysis report of the data that is tracked in the spreadsheet file.
   
